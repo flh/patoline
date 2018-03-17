@@ -23,117 +23,169 @@ open Extra
 open FTypes
 open Bezier
 
-(** Elementary box in a paragraph *)
-type box =
-  | GlyphBox    of RawContent.glyph
-  | Kerning     of box FTypes.kerningBox
-  | Glue        of drawingBox
-  | Drawing     of drawingBox
-  | Hyphen      of hyphenBox
-  | Marker      of marker
-  | BeginFigure of int
-  | FlushFigure of int
-  | Parameters  of (parameters->parameters)
-  | Layout      of (frame_zipper->frame_zipper)
-  | Empty
+module FrameTypes = struct
+  (** Elementary box in a paragraph *)
+  type 'fz fz_box =
+    | GlyphBox    of RawContent.glyph
+    | Kerning     of 'fz fz_box FTypes.kerningBox
+    | Glue        of drawingBox
+    | Drawing     of drawingBox
+    | Hyphen      of 'fz hyphenBox
+    | Marker      of marker
+    | BeginFigure of int
+    | FlushFigure of int
+    | Parameters  of (parameters->parameters)
+    | Layout      of ('fz -> 'fz)
+    | Empty
 
-(** A paragraph is an array of elementary boxes. The line breaking
- algorithm produces lines (given by the type {!type:line}) by selecting
- chunks in a paragraph array. *)
-and paragraph = box array
+  (** A paragraph is an array of elementary boxes. The line breaking
+   algorithm produces lines (given by the type {!type:line}) by selecting
+   chunks in a paragraph array. *)
+  and 'fz fz_paragraph = 'fz fz_box array
 
-and drawingBox =
-  { drawing_min_width     : float
-  ; drawing_nominal_width : float
-  ; drawing_max_width     : float
-  ; drawing_width_fixed   : bool
-  ; drawing_adjust_before : bool
-  ; drawing_y0            : float
-  ; drawing_y1            : float
-  ; drawing_badness       : float -> float
-  ; drawing_break_badness : float
-  ; drawing_states        : int list
-  ; drawing_contents      : float -> RawContent.raw list }
+  and drawingBox =
+    { drawing_min_width     : float
+    ; drawing_nominal_width : float
+    ; drawing_max_width     : float
+    ; drawing_width_fixed   : bool
+    ; drawing_adjust_before : bool
+    ; drawing_y0            : float
+    ; drawing_y1            : float
+    ; drawing_badness       : float -> float
+    ; drawing_break_badness : float
+    ; drawing_states        : int list
+    ; drawing_contents      : float -> RawContent.raw list }
 
-and hyphenBox =
-  { hyphen_normal : box array
-  ; hyphenated    : (box array * box array) array }
+  and 'fz hyphenBox =
+    { hyphen_normal : 'fz fz_box array
+    ; hyphenated    : ('fz fz_box array * 'fz fz_box array) array }
 
-and kind =
-  | Extern of string
-  | Intern of string
-  | Button of button_kind * string
+  and kind =
+    | Extern of string
+    | Intern of string
+    | Button of button_kind * string
 
-and marker =
-  | Label     of string
-  | FigureRef of int
-  | Pageref   of string
-  | Structure of int list
-  | BeginLink of kind
-  | EndLink
-  | AlignmentMark
+  and marker =
+    | Label     of string
+    | FigureRef of int
+    | Pageref   of string
+    | Structure of int list
+    | BeginLink of kind
+    | EndLink
+    | AlignmentMark
 
-(**
- Description of a line, which should be produced by the line breaking
- algorithm. A line is merely described as the index of its first box and
- the index of its last box inside the paragraph (which itself is an
- array of boxes).
- *)
-and line =
-  { paragraph        : int
-  (** Index of the paragraph containing this line in the array *)
-  ; lastFigure       : int
-  (** Last placed figure (initially -1) *)
-  ; lineStart        : int
-  (** Index of the first box of the line in the paragraph. *)
-  ; lineEnd          : int
-  (** Index of the box next to the last box of the line, or the box with
-      the hyphenation if the line is hyphenated. *)
-  ; hyphenStart      : int
-  ; hyphenEnd        : int
-  ; isFigure         : bool
-  ; layout           : frame_zipper
-  ; height           : float
-  ; paragraph_height : int
-  ; page_line        : int
-  ; min_width        : float
-  ; nom_width        : float
-  ; max_width        : float
-  ; line_y0          : float
-  ; line_y1          : float }
+  (**
+   Description of a line, which should be produced by the line breaking
+   algorithm. A line is merely described as the index of its first box and
+   the index of its last box inside the paragraph (which itself is an
+   array of boxes).
+   *)
+  and 'fz fz_line =
+    { paragraph        : int
+    (** Index of the paragraph containing this line in the array *)
+    ; lastFigure       : int
+    (** Last placed figure (initially -1) *)
+    ; lineStart        : int
+    (** Index of the first box of the line in the paragraph. *)
+    ; lineEnd          : int
+    (** Index of the box next to the last box of the line, or the box with
+        the hyphenation if the line is hyphenated. *)
+    ; hyphenStart      : int
+    ; hyphenEnd        : int
+    ; isFigure         : bool
+    ; layout           : 'fz
+    ; height           : float
+    ; paragraph_height : int
+    ; page_line        : int
+    ; min_width        : float
+    ; nom_width        : float
+    ; max_width        : float
+    ; line_y0          : float
+    ; line_y1          : float }
 
-and parameters =
-  { measure            : float
-  ; left_margin        : float
-  ; local_optimization : int
-  ; min_height_before  : float
-  ; min_height_after   : float
-  ; min_page_before    : int
-  ; min_page_after     : int
-  ; not_last_line      : bool
-  ; not_first_line     : bool
-  ; min_lines_before   : int
-  ; min_lines_after    : int
-  ; absolute           : bool }
+  and parameters =
+    { measure            : float
+    ; left_margin        : float
+    ; local_optimization : int
+    ; min_height_before  : float
+    ; min_height_after   : float
+    ; min_page_before    : int
+    ; min_page_after     : int
+    ; not_last_line      : bool
+    ; not_first_line     : bool
+    ; min_lines_before   : int
+    ; min_lines_after    : int
+    ; absolute           : bool }
 
-and placed_line =
-  { line_params : parameters
-  ; line        : line }
+  and 'fz placed_line =
+    { line_params : parameters
+    ; line        : 'fz fz_line }
 
-and frame_content =
-  | Placed_line of placed_line
-  | Raw         of RawContent.raw list
+  and 'fz frame_content =
+    | Placed_line of 'fz placed_line
+    | Raw         of RawContent.raw list
 
-and frame =
-  { frame_children : frame IntMap.t
-  ; frame_tags     : string list
-  ; frame_x0       : float
-  ; frame_y0       : float
-  ; frame_x1       : float
-  ; frame_y1       : float
-  ; frame_content  : frame_content list }
+  and 'fz fz_frame =
+    { frame_children : 'fz fz_frame IntMap.t
+    ; frame_tags     : string list
+    ; frame_x0       : float
+    ; frame_y0       : float
+    ; frame_x1       : float
+    ; frame_y1       : float
+    ; frame_content  : 'fz frame_content list }
+end
 
-and frame_zipper = frame * (int * frame) list
+module rec TreeData : Zipper.TreeData = struct
+  open FrameTypes
+
+  type node = FrameZipper.zipper fz_frame
+  type tree = FrameZipper.zipper fz_frame
+
+  let node_of_tree t = t
+  let tree_of_node t = t
+  let get_child t i = IntMap.find i t.frame_children
+  let set_child frame i d =
+    { frame with frame_children = IntMap.add i d frame.frame_children }
+  let remove_child frame i =
+    { frame with frame_children = IntMap.remove i frame.frame_children }
+  let has_child frame i =
+    IntMap.mem i frame.frame_children
+  let min_index frame =
+    fst (IntMap.min_binding frame.frame_children)
+  let max_index frame =
+    fst (IntMap.max_binding frame.frame_children)
+
+end
+and FrameZipper : sig
+  type tree = TreeData.tree
+  type node = TreeData.tree
+  type zipper = tree * (int * node) list
+  val tree_to_zipper : tree -> zipper
+  val zipper_to_tree : zipper -> tree
+  val empty : node -> zipper
+  val is_root : zipper -> bool
+  val up : zipper -> zipper
+  val up_n : int -> zipper -> zipper
+  val top : zipper -> zipper
+  val down : zipper -> int -> zipper
+  val down_path : zipper -> int list -> zipper
+  val min_index : zipper -> int
+  val max_index : zipper -> int
+  val down_first : zipper -> zipper
+  val down_last : zipper -> zipper
+  val new_child : zipper -> tree -> int -> zipper
+  val new_last_child : zipper -> tree -> zipper
+  val new_first_child : zipper -> tree -> zipper
+  val has_child : zipper -> int -> bool
+  val remove_child : zipper -> int -> zipper
+end = Zipper.Make(TreeData)
+
+include FrameTypes
+type frame_zipper = FrameZipper.zipper
+type box = frame_zipper fz_box
+type line = frame_zipper fz_line
+type frame = frame_zipper fz_frame
+type paragraph = frame_zipper fz_paragraph
 
 module MarkerMap = Map.Make(
   struct
@@ -149,9 +201,9 @@ module MarkerMap = Map.Make(
   end)
 
 (** Helpful test functions. *)
-let is_glyph  : box -> bool = function GlyphBox _ -> true | _ -> false
-let is_glue   : box -> bool = function Glue _     -> true | _ -> false
-let is_hyphen : box -> bool = function Hyphen _   -> true | _ -> false
+let is_glyph  = function GlyphBox _ -> true | _ -> false
+let is_glue   = function Glue _     -> true | _ -> false
+let is_hyphen = function Hyphen _   -> true | _ -> false
 
 (** Build a box containing one glyph, with a cache. *)
 let glyphCache : Fonts.font -> glyph_id -> Color.color -> float -> box =
